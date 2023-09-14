@@ -13,6 +13,9 @@ from rich import print as rprint
 import math
 import csv
 from datetime import datetime
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import stats
 
 starChar = '★'
 halfChar = '½'
@@ -65,7 +68,10 @@ def get_user_page_urls(time_range, page_count):
     for number in range(1, min(page_count, MAX_NUM_PAGES)+1):
         yield f'{url}/page/{number}'
 
-def user_list(time_range='all-time', user_count=None):
+def user_list(time_range='all-time', user_count=None, users_override=None):
+    if (users_override != None):
+        return users_override
+
     target_user_count = MAX_NUM_PAGES * NUM_USERS_PER_PAGE if user_count == None else user_count
 
     page_count = math.ceil(target_user_count / NUM_USERS_PER_PAGE)
@@ -105,16 +111,58 @@ def sanitize_zipped_data(zipped_data):
         result.append(this_line)
     return result
 
-users = user_list(time_range="all-time", user_count=5)
+users = user_list(time_range="all-time", user_count=1, users_override=["hahaveryfun"])
 zipped_data = zip_users_and_their_movie_ratings(users)
-sanitized_data = sanitize_zipped_data(zipped_data)
 
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+for user in zipped_data:
+    ratings = zipped_data[user];
+    sanitized_ratings = [];
+    for rating in ratings:
+        try:
+            sanitized_ratings = sanitized_ratings+[float(rating['rating'])]
+        except ValueError:
+            print(f'Cannot convert rating for: {rating["title"]}')
 
-filename = f"data_{timestamp}.csv"
+    plt.hist(sanitized_ratings, bins=10, density=True, alpha=1, color='b')
+    plt.xlabel('Rating')
+    plt.ylabel('Frequency')
+    plt.title('Rating Frequency')
 
-fieldnames = sanitized_data[0].keys()  # Assuming all dictionaries have the same keys
-with open(filename, mode='w', newline='') as file:
-    writer = csv.DictWriter(file, fieldnames=fieldnames)
-    writer.writeheader()  # Write the header row
-    writer.writerows(sanitized_data)
+    mu, std = np.mean(sanitized_ratings), np.std(sanitized_ratings)
+    xmin, xmax = plt.xlim()
+    x = np.linspace(xmin, xmax, 100)
+    p = stats.norm.pdf(x, mu, std)
+    plt.plot(x, p, 'k', linewidth=2)
+    plt.legend(['Fit','Data'])
+    
+    # QQ plot
+    plt.figure()
+    stats.probplot(sanitized_ratings, dist="norm", plot=plt)
+    plt.title('Quantile-Quantile Plot')
+
+    # Normality test (Shapiro-Wilk)
+    _, p_value = stats.shapiro(sanitized_ratings)
+    print(p_value)
+    alpha = 0.05  # Significance level
+    if p_value > alpha:
+        print("Data appears to be normally distributed (fail to reject H0)")
+    else:
+        print("Data does not appear to be normally distributed (reject H0)")
+
+    plt.show()
+
+    plt.clf()
+
+# Write to CSV
+
+# sanitized_data = sanitize_zipped_data(zipped_data)
+
+# timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+# filename = f"data_{timestamp}.csv"
+
+# fieldnames = sanitized_data[0].keys()  # Assuming all dictionaries have the same keys
+# with open(filename, mode='w', newline='') as file:
+#     writer = csv.DictWriter(file, fieldnames=fieldnames)
+#     writer.writeheader()  # Write the header row
+#     writer.writerows(sanitized_data)
